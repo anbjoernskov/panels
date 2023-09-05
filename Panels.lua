@@ -452,6 +452,7 @@ end
 
 local function loadSequence(num)
 	sequence = sequences[num]
+	updateHintsMenu(num)
 	if num > Panels.maxUnlockedSequence then Panels.maxUnlockedSequence = num end
 
 	-- set default scroll direction for each axis if not specified
@@ -476,6 +477,10 @@ local function loadSequence(num)
 
 	if sequence.backControl == nil then
 		sequence.backControl = getBackControlForScrollDirection(sequence.direction)
+	end
+
+	if sequence.hints == nil then
+		sequence.hints = {}
 	end
 
 	if sequence.audio then
@@ -888,6 +893,7 @@ local function updateSystemMenu()
 		local chaptersMenuItem, error = sysMenu:addMenuItem("Chapters",
 			function()
 				Panels.creditsMenu:hide()
+				Panels.hintsMenu:hide()
 				Panels.chapterMenu:show()
 			end
 		)
@@ -898,11 +904,21 @@ local function updateSystemMenu()
 	local creditsItem, error2 = sysMenu:addMenuItem("Credits",
 		function()
 			if Panels.chapterMenu then Panels.chapterMenu:hide() end
+			Panels.hintsMenu:hide()
 			Panels.creditsMenu:show()
 		end
 	)
 	printError(error2, "Error adding Credits to system menu:")
 
+	local hintsItem, error3 = sysMenu:addMenuItem("Hints", 
+		function()
+			if Panels.hintsMenu then Panels.hintsMenu:hide() end
+			Panels.creditsMenu:hide()
+			Panels.chapterMenu:hide()
+			Panels.hintsMenu:show()
+		end
+		)
+	printError(error3, "Error adding Hints to system menu")
 end
 
 local function createCreditsSequence()

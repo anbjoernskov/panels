@@ -402,6 +402,122 @@ local function createCreditsMenu()
 	return menu
 end
 
+-- HINTS MENU
+local hintsList = playdate.ui.gridview.new(0, 32)
+local sequenceHints = nil
+local selectedSequenceHints = nil
+
+local function redrawHintsMenu(yPos)
+	hintsList:drawInRect(13, yPos +1, 374, 240)
+end
+
+local function onHintsMenuWillShow() 
+	hintsList:setSelectedRow(1)
+	hintsList:selectPreviousRow()
+	if next(selectedSequenceHints) == nil then 
+		hintsList:setNumberOfRows(1) -- just show the empty message
+	else
+		hintsList:setNumberOfRows(#selectedSequenceHints)
+	end
+end
+
+function updateHintsMenu(selectedSequence)
+	selectedSequenceHints = {}
+	if sequenceHints ~= nil then
+		for i, h in ipairs(sequenceHints[selectedSequence]) do
+			table.insert(selectedSequenceHints, h)
+		end
+	end
+end
+
+local function createHintsMenu(sequences)
+	hintsList:setSectionHeaderHeight(48)
+	hintsList:setCellPadding(0, 0, 0, 8)
+
+	sequenceHints = {}
+	for i, seq in ipairs(sequences) do
+		if seq.hints then
+			sequenceHints[i] = seq.hints
+		else
+			sequenceHints[i] = {}
+		end
+	end
+	
+	local inputHandlers = {
+		downButtonUp = function()
+			chapterOffset = 4
+			if hintsList:getSelectedRow() < maxUnlockedChapter then 
+				hintsList:selectNextRow(false)
+				if Panels.Settings.playMenuSounds then 
+					selectionSound:play()
+				end
+			else
+				if Panels.Settings.playMenuSounds then 
+					denialSound:play()
+				end
+			end
+		end,
+		
+		upButtonUp = function()
+			chapterOffset = -4
+			if Panels.Settings.playMenuSounds then 
+				if hintsList:getSelectedRow() > 1 then 
+					selectionRevSound:play()
+				else
+					denialSound:play()
+				end
+			end
+			hintsList:selectPreviousRow(false)
+		end,
+		
+		AButtonDown = function()
+			local item = selectedSequenceHints[chapterList:getSelectedRow()] 
+			-- Panels.onChapterSelected( item.index )
+			-- Panels.chapterMenu:hide()
+			-- if Panels.mainMenu then Panels.mainMenu:hide() end
+			-- if Panels.Settings.playMenuSounds then
+			-- 	confirmSound:play()
+			-- end
+		end,
+		
+		BButtonDown = function()
+			Panels.hintsMenu:hide()
+		end
+	}
+	
+	local menu = Panels.Menu.new(ScreenHeight, redrawHintsMenu, inputHandlers)
+	menu.onWillShow = onHintsMenuWillShow
+	return menu
+end
+
+function hintsList:drawCell(section, row, column, selected, x, y, width, height)
+		if selected then
+			gfx.setColor(gfx.kColorBlack)
+			gfx.fillRoundRect(x, y + chapterOffset, width, height, 4)
+			-- gfx.drawRoundRect(x + 1, y, width - 2, height, 4)
+			gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+			chapterOffset = 0
+		else
+			gfx.setImageDrawMode(gfx.kDrawModeCopy)
+		end
+		
+		gfx.setFont(listFont)
+		if next(selectedSequenceHints) ~= nil then
+			gfx.drawTextInRect("Hint " .. row .. "", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+		else
+			gfx.drawTextInRect("No hints for this chapter", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+		end
+
+end
+
+function hintsList:drawSectionHeader(section, x, y, width, height)
+		gfx.setColor(gfx.kColorBlack)
+		gfx.setFont(headerFont)
+		gfx.drawTextInRect("Hints", x, y+12, width, height, nil, "...", kTextAlignment.center)
+		gfx.setLineWidth(1)
+		gfx.drawLine(x, y + 20, x + 120, y + 20)
+		gfx.drawLine(x + width - 120, y + 20, x + width, y + 20)
+end
 
 -- -------------------------------------------------
 -- ALL MENUS
@@ -420,6 +536,10 @@ function updateMenus()
 	if Panels.creditsMenu:isActive() then 
 		Panels.creditsMenu:update()
 	end
+
+	if Panels.hintsMenu:isActive() then
+		Panels.hintsMenu:update()
+	end
 end
 
 function createMenus(sequences, gameDidFinish, gameDidStart)
@@ -430,6 +550,8 @@ function createMenus(sequences, gameDidFinish, gameDidStart)
 	end
 
 	Panels.creditsMenu = createCreditsMenu()
+
+	Panels.hintsMenu = createHintsMenu(sequences)
 end
 
 
