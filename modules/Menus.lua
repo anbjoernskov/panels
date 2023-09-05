@@ -403,22 +403,44 @@ local function createCreditsMenu()
 end
 
 -- HINTS MENU
+
+-- make hint box
+Panels.HintBox = {}
+local hintBox = gfx.image.new(400,240)
+local displayHintBox = false
+
+local function updateHintBox(item)
+	gfx.pushContext(hintBox)
+	gfx.setColor(Panels.Color.WHITE)
+	gfx.fillRoundRect(50, 20, 300, 200, 4)
+
+	gfx.setColor(Panels.Color.BLACK)
+	gfx.setLineWidth(2)
+	gfx.drawRoundRect(50, 20, 300, 200, 4)
+	gfx.drawTextInRect(item, 60, 70, 300, 200, nil, "...", kTextAlignment.left)
+	gfx.popContext()
+end
+
 local hintsList = playdate.ui.gridview.new(0, 32)
 local sequenceHints = nil
 local selectedSequenceHints = nil
 
 local function redrawHintsMenu(yPos)
 	hintsList:drawInRect(13, yPos +1, 374, 240)
+	if displayHintBox then
+		hintBox:drawAnchored(200, 120, 0.5, 0.5)
+	end
 end
 
 local function onHintsMenuWillShow() 
 	hintsList:setSelectedRow(1)
 	hintsList:selectPreviousRow()
-	if next(selectedSequenceHints) == nil then 
+	if next(selectedSequenceHints) == nil then
 		hintsList:setNumberOfRows(1) -- just show the empty message
 	else
 		hintsList:setNumberOfRows(#selectedSequenceHints)
 	end
+	displayHintBox = false
 end
 
 function updateHintsMenu(selectedSequence)
@@ -445,43 +467,49 @@ local function createHintsMenu(sequences)
 	
 	local inputHandlers = {
 		downButtonUp = function()
-			chapterOffset = 4
-			if hintsList:getSelectedRow() < maxUnlockedChapter then 
+			if displayHintBox == false then
 				hintsList:selectNextRow(false)
 				if Panels.Settings.playMenuSounds then 
 					selectionSound:play()
-				end
-			else
-				if Panels.Settings.playMenuSounds then 
-					denialSound:play()
 				end
 			end
 		end,
 		
 		upButtonUp = function()
-			chapterOffset = -4
-			if Panels.Settings.playMenuSounds then 
-				if hintsList:getSelectedRow() > 1 then 
-					selectionRevSound:play()
-				else
-					denialSound:play()
+			if displayHintBox == false then
+				if Panels.Settings.playMenuSounds then 
+					if hintsList:getSelectedRow() > 1 then 
+						selectionRevSound:play()
+					else
+						denialSound:play()
+					end
 				end
+				hintsList:selectPreviousRow(false)
 			end
-			hintsList:selectPreviousRow(false)
 		end,
 		
 		AButtonDown = function()
-			local item = selectedSequenceHints[chapterList:getSelectedRow()] 
-			-- Panels.onChapterSelected( item.index )
-			-- Panels.chapterMenu:hide()
-			-- if Panels.mainMenu then Panels.mainMenu:hide() end
-			-- if Panels.Settings.playMenuSounds then
-			-- 	confirmSound:play()
-			-- end
+			local item = selectedSequenceHints[hintsList:getSelectedRow()] 
+			if item == nil then
+				if Panels.Settings.playMenuSounds then
+					denialSound:play()
+				end
+			else
+				-- make a box and display the hint text
+				updateHintBox(item)
+				displayHintBox = true
+				if Panels.Settings.playMenuSounds then
+					confirmSound:play()
+				end
+			end
 		end,
 		
 		BButtonDown = function()
-			Panels.hintsMenu:hide()
+			if displayHintBox == true then
+				displayHintBox = false
+			else
+				Panels.hintsMenu:hide()
+			end
 		end
 	}
 	
