@@ -434,6 +434,7 @@ function Panels.Panel.new(data)
 					else
 						local p = cntrlPct
 						p = p - (self.transitionOffset or 0)
+						p = p - (layer.transitionOffset or 0)
 						local j = math.max(math.min(math.ceil(p * #layer.imgs), #layer.imgs), 1)
 						img = layer.imgs[j]
 					end
@@ -709,7 +710,6 @@ function Panels.Panel.new(data)
 
 	function panel:updateAdvanceButton()
 		if self.advanceButton.state == "hidden" then
-
 
 			if self.advanceControlPosition and self.advanceControlPosition.delay and self.advanceControlTimer == nil then
 				self.advanceControlTimer = playdate.timer.new(self.advanceControlPosition.delay, nil)
