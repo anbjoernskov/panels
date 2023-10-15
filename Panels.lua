@@ -521,8 +521,12 @@ local function loadSequence(num)
 		sequence.advanceControls = { control }
 	end
 
-	if sequence.showAdvanceControls == nil then
-		sequence.showAdvanceControls = sequence.showAdvanceControl and true
+	if sequence.showAdvanceControls == nil and sequence.showAdvanceControl == nil then
+		sequence.showAdvanceControls = true
+	end
+
+	if sequence.showAdvanceControl ~= nil then
+		sequence.showAdvanceControls = sequence.showAdvanceControl
 	end
 
 	if sequence.backControl == nil then
