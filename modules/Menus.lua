@@ -470,11 +470,17 @@ local function updateHintBox(item)
 	gfx.pushContext(hintBox)
 	gfx.setColor(Panels.Color.WHITE)
 	gfx.fillRoundRect(50, 20, 300, 200, 4)
-
+	if item.image then
+		gfx.setClipRect(50, 20, 300, 200)
+		local hintBoxImage = gfx.image.new(Panels.Settings.imageFolder .. item.image)
+		hintBoxImage:drawAnchored(200, 120, 0.5, 0.5)
+		gfx.clearClipRect()
+	else
+		gfx.drawTextInRect(item, 60, 70, 300, 200, nil, "...", kTextAlignment.left)
+	end
 	gfx.setColor(Panels.Color.BLACK)
 	gfx.setLineWidth(2)
 	gfx.drawRoundRect(50, 20, 300, 200, 4)
-	gfx.drawTextInRect(item, 60, 70, 300, 200, nil, "...", kTextAlignment.left)
 	gfx.popContext()
 end
 
