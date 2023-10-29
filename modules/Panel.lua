@@ -322,7 +322,13 @@ function Panels.Panel.new(data)
 
 	function panel:drawLayers(offset)
 		local layers = self.layers
-		local frame = self.frame
+		local frame = table.shallow_copy(self.frame)
+		if self.mainFrameWidth ~= nil then
+			frame.width = self.mainFrameWidth
+		end
+		if self.mainFrameHeight ~= nil then
+			frame.height = self.mainFrameHeight
+		end
 		local shake
 		local pct = getScrollPercentages(frame, offset, self.axis)
 		local cntrlPct
