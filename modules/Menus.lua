@@ -486,7 +486,7 @@ end
 
 local hintsList = playdate.ui.gridview.new(0, 32)
 local sequenceHints = nil
-local selectedSequenceHints = nil
+local selectedSequenceHints = {}
 
 local function redrawHintsMenu(yPos)
 	hintsList:drawInRect(13, yPos +1, 374, 240)
@@ -594,7 +594,11 @@ function hintsList:drawCell(section, row, column, selected, x, y, width, height)
 		
 		gfx.setFont(listFont)
 		if next(selectedSequenceHints) ~= nil then
-			gfx.drawTextInRect("Hint " .. row .. "", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+			if selectedSequenceHints[row].image ~= nil then
+				gfx.drawTextInRect("Answer", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)	
+			else
+				gfx.drawTextInRect("Hint " .. row .. "", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+			end
 		else
 			gfx.drawTextInRect("No hints for this chapter", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
 		end
