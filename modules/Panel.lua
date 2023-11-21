@@ -98,8 +98,12 @@ function Panels.Panel.new(data)
 	panel.prevPct = 0
 	panel.frame = createFrameFromPartialFrame(panel.frame)
 	panel.buttonsPressed = {}
-	panel.canvas = gfx.image.new(panel.frame.width, panel.frame.height, gfx.kColorBlack)
-	-- panel.canvas = gfx.image.new(ScreenWidth, ScreenHeight, gfx.kColorBlack)
+	if panel.hack == nil then panel.hack = false end
+	if not panel.hack then
+		panel.canvas = gfx.image.new(panel.frame.width, panel.frame.height, gfx.kColorBlack)
+	else
+		panel.canvas = gfx.image.new(ScreenWidth, ScreenHeight, gfx.kColorBlack)
+	end
 
 	if not panel.backgroundColor then panel.backgroundColor = Panels.Color.WHITE end
 
@@ -744,6 +748,18 @@ function Panels.Panel.new(data)
 		
 		if self.updateFunction then 
 			self:updateFunction(offset)
+		end
+
+		if self.hack then
+			-- set offset x and y to max 0
+			if offset.x > 0 then offset.x = 0 end
+			if offset.y > 0 then offset.y = 0 end
+
+			-- set offset x and y to min frame width/height
+			if offset.x < -self.frame.width + ScreenWidth then offset.x = -self.frame.width + ScreenWidth end
+			if offset.y < -self.frame.height + ScreenHeight then offset.y = -self.frame.height + ScreenHeight end
+
+			gfx.setDrawOffset(offset.x, offset.y)
 		end
 
 		if self.renderFunction then
