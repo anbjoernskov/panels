@@ -751,15 +751,8 @@ function Panels.Panel.new(data)
 		end
 
 		if self.hack then
-			-- set offset x and y to max 0
-			if offset.x > 0 then offset.x = 0 end
-			if offset.y > 0 then offset.y = 0 end
-
-			-- set offset x and y to min frame width/height
-			if offset.x < -self.frame.width + ScreenWidth then offset.x = -self.frame.width + ScreenWidth end
-			if offset.y < -self.frame.height + ScreenHeight then offset.y = -self.frame.height + ScreenHeight end
-
 			gfx.setDrawOffset(offset.x, offset.y)
+			gfx.setClipRect(self.frame.x, self.frame.y, self.frame.width, self.frame.height)
 		end
 
 		if self.renderFunction then
