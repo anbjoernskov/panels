@@ -586,6 +586,8 @@ function Panels.Panel.new(data)
 		if(layer.cachedTextImg == nil) then
 			layer.cachedTextImg = gfx.image.new(ScreenWidth, ScreenHeight)
 			layer.needsRedraw = true
+		else
+			layer.needsRedraw = false
 		end
 
 
