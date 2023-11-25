@@ -1,4 +1,4 @@
--- Panels version 1.6.2
+-- Panels version 1.7
 -- https://cadin.github.io/panels/
 
 import "CoreLibs/object"
@@ -812,7 +812,8 @@ end
 
 local function drawComic(offset)
 	gfx.clear(sequence.backgroundColor)
-
+	-- 
+	-- setDefaultFont()
 
 	if shouldFadeBG then
 		local pct = 1 -
@@ -825,8 +826,7 @@ local function drawComic(offset)
 	for i, panel in ipairs(panels) do
 		if (panel:isOnScreen(offset)) then
 			panel:render(offset, sequence.foregroundColor, sequence.backgroundColor)
-			panel.canvas:draw(panel.frame.x + offset.x, panel.frame.y + offset.y)
-
+			panel.canvas:draw(0, 0)
 		elseif panel.wasOnScreen then
 			if panel.targetSequenceFunction then
 				targetSequence = panel.targetSequenceFunction()
@@ -836,7 +836,6 @@ local function drawComic(offset)
 			panel.wasOnScreen = false
 		end
 	end
-
 end
 
 -- Playdate update loop
@@ -1049,7 +1048,16 @@ local function createCreditsSequence()
 	table.insert(Panels.comicData, seq)
 end
 
+function setDefaultFont() 
+	if Panels.Settings.defaultFontFamily then
+		gfx.setFontFamily(Panels.Font.getFamily(Panels.Settings.defaultFontFamily))
+	elseif Panels.Settings.defaultFont then 
+		gfx.setFont(Panels.Font.get(Panels.Settings.defaultFont))
+	end
+end
+
 function Panels.startCutscene(comicData, callback)
+	setDefaultFont()
 	isCutscene = true
 	cutsceneFinishCallback = callback
 	Panels.comicData = comicData
@@ -1070,6 +1078,7 @@ function Panels.startCutscene(comicData, callback)
 end
 
 function Panels.start(comicData)
+	setDefaultFont()
 	Panels.comicData = comicData
 	maxScrollVelocity = Panels.Settings.maxScrollSpeed
 	alert = Panels.Alert.new("Start Over?", "All progress will be lost.", { "Cancel", "Start Over" })
