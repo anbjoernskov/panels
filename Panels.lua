@@ -1,4 +1,4 @@
--- Panels version 1.7.1
+-- Panels version 1.7.2
 -- https://cadin.github.io/panels/
 
 import "CoreLibs/object"
@@ -40,6 +40,7 @@ local pdEaseInOutQuad = playdate.easingFunctions.inOutQuad
 local pdButtonJustPressed = playdate.buttonJustPressed
 
 local sequenceDidStart = false
+local sequenceIsFinishing = false
 
 local currentSeqIndex = 1
 local sequences = nil
@@ -199,7 +200,7 @@ end
 
 local function drawButtonIndicators(offset)
 	if transitionOutAnimator == nil then
-		if lastPanelIsShowing() and sequenceDidStart then
+		if lastPanelIsShowing() and sequenceDidStart and not sequenceIsFinishing then
 			for key, button in pairs(buttonIndicators) do
 				button:show()
 			end
@@ -650,6 +651,7 @@ local function updateSequenceTransition()
 		scrollPos = transitionInAnimator:currentValue()
 		if transitionInAnimator:ended() then
 			sequenceDidStart = true
+			sequenceIsFinishing = false
 			transitionInAnimator = nil
 			shouldFadeBG = false
 		end
@@ -699,6 +701,7 @@ end
 
 local function checkInputs()
 	local p = panels[panelNum]
+	if sequenceIsFinishing then return end
 	if lastPanelIsShowing() then
 		if p.advanceFunction == nil then 
 			for i, button in ipairs(buttonIndicators) do
@@ -708,6 +711,7 @@ local function checkInputs()
 					end
 					button:press()
 					hideOtherAdvanceControls(i)
+					sequenceIsFinishing = true
 					if p.advanceDelay then
 						p:exit()
 						playdate.timer.performAfterDelay(p.advanceDelay, finishSequence)
@@ -871,6 +875,7 @@ end
 local function loadGameData()
 	local data = playdate.datastore.read()
 	if data then
+		currentSeqIndex = data.sequence
 		Panels.unlockedSequences = data.unlockedSequences or {}
 		gameDidFinish = data.gameDidFinish
 		Panels.vars = data.vars or {}
