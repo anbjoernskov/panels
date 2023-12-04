@@ -491,7 +491,7 @@ local function updateHintBox(item)
 		hintBoxImage:drawAnchored(200, 120, 0.5, 0.5)
 		gfx.clearClipRect()
 	else
-		gfx.drawTextInRect(item, 60, 70, 300, 200, nil, "...", kTextAlignment.left)
+		gfx.drawTextInRect(item, 60, 70, 290, 190, nil, "...", kTextAlignment.left)
 	end
 	gfx.setColor(Panels.Color.BLACK)
 	gfx.setLineWidth(2)
