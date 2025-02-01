@@ -1,4 +1,4 @@
--- Panels version 1.7.3
+-- Panels version 2.0.1
 -- https://cadin.github.io/panels/
 
 import "CoreLibs/object"
@@ -6,6 +6,7 @@ import "CoreLibs/graphics"
 import "CoreLibs/sprites"
 import "CoreLibs/timer"
 import "CoreLibs/animation"
+import "CoreLibs/crank"
 
 local gfx <const> = playdate.graphics
 local ScreenHeight <const> = playdate.display.getHeight()
@@ -15,6 +16,10 @@ Panels = {}
 Panels.comicData = {}
 Panels.credits = {}
 Panels.vars = {}
+Panels.persistentVars = {}
+Panels.percentageComplete = 0
+Panels.unlockedSequences = {}
+Panels.visitedSequences = {}
 
 import "./modules/Font"
 import "./modules/Audio"
@@ -71,8 +76,8 @@ local previousBGColor = nil
 local transitionFader = nil
 local shouldFadeBG = false
 
-Panels.unlockedSequences = {}
 local gameDidFinish = false
+local numSequencesUnlocked = 0
 
 local alert = nil
 
@@ -107,7 +112,7 @@ local function setUpPanels(seq)
 		panel.direction = seq.direction
 
 		if panel.advanceControl == nil then
-			if panel.advanceControlSequence and #panel.advanceControlSequence == 1 then
+			if panel.advanceControlSequence and #panel.advanceControlSequence >= 1 then
 				panel.advanceControl = panel.advanceControlSequence[1]
 			else
 				panel.advanceControl = sequence.advanceControl
@@ -190,10 +195,10 @@ end
 local function createButtonIndicators()
 	buttonIndicators = {}
 	if sequence.advanceControls == nil then
-		buttonIndicators = { Panels.ButtonIndicator.new() }
+		buttonIndicators = { Panels.ButtonIndicator.new(sequence.advanceControlSize) }
 	else
 		for i, value in ipairs(sequence.advanceControls) do
-			buttonIndicators[i] = Panels.ButtonIndicator.new()
+			buttonIndicators[i] = Panels.ButtonIndicator.new(sequence.advanceControlSize)
 		end
 	end
 end
@@ -275,6 +280,9 @@ end
 local function updateScroll()
 	if panelTransitionAnimator then
 		scrollPos = panelTransitionAnimator:currentValue()
+		if panelTransitionAnimator:ended() then
+			panelTransitionAnimator = nil
+		end
 	else
 		if scrollPos > 0 then
 			scrollPos = math.floor(scrollPos / snapStrength)
@@ -324,7 +332,7 @@ end
 
 local function scrollToNextPanel()
 	if not isLastPanel(panelNum) then
-		if panelTransitionAnimator and panelTransitionAnimator:progress() < 1 then return end
+		if not sequence.rapidAdvance and panelTransitionAnimator and panelTransitionAnimator:progress() < 1 then return end
 		local p = panels[panelNum]
 		p.buttonsPressed = {}
 		local target = 0
@@ -343,7 +351,9 @@ local function scrollToNextPanel()
 		if sequence.direction == Panels.ScrollDirection.NONE then
 			scrollPos = target
 		else
-			panelTransitionAnimator = gfx.animator.new(500, scrollPos, target, pdEaseInOutQuad)
+			local duration = sequence.transitionDuration or 500
+			local ease = sequence.transitionEase or pdEaseInOutQuad
+			panelTransitionAnimator = gfx.animator.new(duration, scrollPos, target, ease)
 		end
 	end
 end
@@ -364,14 +374,16 @@ local function scrollToPreviousPanel()
 			end
 			target = getPanelScrollLocation(panels[panelNum], true)
 		end
-		panelTransitionAnimator = gfx.animator.new(500, scrollPos, target, pdEaseInOutQuad)
+		local duration = sequence.transitionDuration or 500
+		local ease = sequence.transitionEase or pdEaseInOutQuad
+		panelTransitionAnimator = gfx.animator.new(duration, scrollPos, target, ease)
 	end
 end
 
 -- -------------------------------------------------
 -- SEQUENCE TRANSITIONS
 
-local function startTransitionIn(direction, delay)
+local function startTransitionIn(direction, delay, duration, ease)
 	local target = scrollPos
 	local start
 
@@ -401,17 +413,18 @@ local function startTransitionIn(direction, delay)
 	shouldFadeBG = previousBGColor ~= nil and previousBGColor ~= sequence.backgroundColor
 
 	local function delayedStart()
-		transitionInAnimator = playdate.graphics.animator.new(
-			Panels.Settings.sequenceTransitionDuration, start, target, playdate.easingFunctions.inOutQuart)
+		duration = duration or Panels.Settings.sequenceTransitionDuration
+		ease = ease or playdate.easingFunctions.inOutQuart
+		transitionInAnimator = playdate.graphics.animator.new(duration, start, target, ease)
 	end
 
 	playdate.timer.performAfterDelay(delay, delayedStart)
 end
 
-local function startTransitionOut(direction)
+local function startTransitionOut(direction, duration, ease)
 	local target
 	local start = scrollPos
-	local duration = Panels.Settings.sequenceTransitionDuration
+	local duration = duration or Panels.Settings.sequenceTransitionDuration
 
 	if direction == Panels.ScrollDirection.TOP_DOWN then
 		target = -maxScroll - ScreenHeight
@@ -426,9 +439,8 @@ local function startTransitionOut(direction)
 		target = -maxScroll - ScreenWidth
 	end
 
-
-	transitionOutAnimator = playdate.graphics.animator.new(
-		duration, start, target, playdate.easingFunctions.inOutQuart)
+	ease = ease or playdate.easingFunctions.inOutQuart
+	transitionOutAnimator = playdate.graphics.animator.new(duration, start, target, ease)
 end
 
 local function getAxisForScrollDirection(dir)
@@ -480,6 +492,30 @@ local function setSequenceColors()
 	end
 end
 
+local function countVisitedSequences(unlocked)
+	local count = 0
+	for i, v in ipairs(unlocked) do
+		if v then count = count + 1 end
+	end
+	return count
+end
+
+local function calculatePercentageComplete() 
+	numSequencesVisited = countVisitedSequences(Panels.visitedSequences)
+	Panels.percentageComplete = math.floor((numSequencesVisited / #sequences) * 100)
+end
+
+local function markSequenceAsVisited(num)
+	for i = 1, num, 1 do
+		if not Panels.visitedSequences[i]  then
+			Panels.visitedSequences[i] = false
+		end
+	end
+
+	Panels.visitedSequences[num] = true
+	calculatePercentageComplete()
+end
+
 local function unlockSequence(num)
 	for i = 1, num, 1 do
 		if not Panels.unlockedSequences[i]  then
@@ -488,6 +524,7 @@ local function unlockSequence(num)
 	end
 
 	Panels.unlockedSequences[num] = true
+	markSequenceAsVisited(num)
 end
 
 local function loadSequence(num)
@@ -509,18 +546,18 @@ local function loadSequence(num)
 		sequence.defaultFrame = Panels.Settings.defaultFrame
 	end
 
-	if sequence.advanceControls == nil then 
+	if sequence.advanceControls == nil then
 		local control
 		if sequence.advanceControl == nil then
 			local _input = getAdvanceControlForScrollDirection(sequence.direction)
 			control = {input = _input}
 			sequence.advanceControl = _input
-		else 
+		else
 			control = {input = sequence.advanceControl}
 		end
 
 		if sequence.advanceControlPosition == nil then
-			local x, y = Panels.ButtonIndicator.getPosititonForScrollDirection(sequence.direction)
+			local x, y = Panels.ButtonIndicator.getPosititonForScrollDirection(sequence.direction, sequence.advanceControlSize)
 			control.x = x
 			control.y = y
 		else
@@ -529,13 +566,13 @@ local function loadSequence(num)
 		end
 
 		sequence.advanceControls = { control }
-	
+
 	end
 
 	if sequence.showAdvanceControls == nil then
 		if sequence.showAdvanceControl == nil then
 			sequence.showAdvanceControls = true
-		else 
+		else
 			sequence.showAdvanceControls = sequence.showAdvanceControl
 		end
 	end
@@ -579,13 +616,25 @@ local function loadSequence(num)
 		buttonIndicators[i]:setPosition(control.x or (i-1) * 40, control.y or 0)
 	end
 
-	startTransitionIn(sequence.direction, sequence.delay or 0)
+	startTransitionIn(sequence.direction, sequence.delay or 0, sequence.transitionDuration, sequence.transitionEase)
 
 end
 
 local function unloadSequence()
+	
+	if(sequence.direction == Panels.ScrollDirection.NONE) then
+		-- because the lack of scroll causes these not to get called
+		local lastPanel = panels[#panels]
+		if lastPanel.targetSequenceFunction then targetSequence = lastPanel.targetSequenceFunction() end
+		lastPanel:reset()
+	end
+
 	for i, p in ipairs(panels) do
 		p:killTypingEffects()
+		if p.wasOnScreen then
+			p:reset()
+		end
+		p.sfxPlayer = nil
 		if p.layers then
 			for j, l in ipairs(p.layers) do
 				if l.timer then
@@ -593,43 +642,73 @@ local function unloadSequence()
 					l.timer = nil
 				end
 
+				l.sfxPlayer = nil
+
 				if l.animationLoop then
 					l.animationLoop = nil
 				end
+				l.img = nil
+				l.imgTable = nil
+				l = nil
 			end
+			-- p.layers = nil
 		end
-		if p.wasOnScreen then
-			p:reset()
-		end
+		p = nil
 	end
+
 	panelTransitionAnimator = nil
 	Panels.Image.clearCache()
 	sequence.didFinish = false
 	previousBGColor = sequence.backgroundColor
+
+	if targetSequence == nil and sequence.nextSequence then
+		targetSequence = sequence.nextSequence
+	end
+end
+
+local function getIndexForTarget(target)
+	-- if target is a number, return it
+	if type(target) == "number" then
+		return target
+	end
+
+	-- if target is a string, find the index of the sequence with that id
+	if type(target) == "string" then
+		for i, seq in ipairs(sequences) do
+			if seq.id == target then
+				return i
+			end
+		end
+	end
+
+	printError("The target sequence '".. target .."' could not be found.", "Invalid target sequence ID")
 end
 
 local function nextSequence()
 	local isDeadEnd = sequence.endSequence or false
 	unloadSequence()
-	if isCutscene then
-		playdate.inputHandlers.pop()
-		gameDidFinish = true
-		cutsceneFinishCallback(targetSequence)
-		Panels.Audio.killBGAudio()
-	elseif targetSequence then
-		loadSequence(targetSequence)
+
+	local targetIndex = targetSequence and getIndexForTarget(targetSequence) or nil
+
+	if targetSequence then
+		loadSequence(targetIndex)
 		targetSequence = nil
-		updateMenuData(sequences, gameDidFinish)
+		updateMenuData(sequences, gameDidFinish, currentSeqIndex > 1)
 	elseif currentSeqIndex < #sequences and not isDeadEnd then
 		currentSeqIndex = currentSeqIndex + 1
 		loadSequence(currentSeqIndex)
-		updateMenuData(sequences, gameDidFinish)
-
+		updateMenuData(sequences, gameDidFinish, currentSeqIndex > 1)
+	elseif isCutscene then
+		playdate.inputHandlers.pop()
+		gameDidFinish = true
+		cutsceneFinishCallback(targetIndex)
+		Panels.Audio.killBGAudio()
+		previousBGColor = nil -- prevent future cross-fade attempt
 	else
 		gameDidFinish = true
-		updateMenuData(sequences, gameDidFinish)
+		updateMenuData(sequences, gameDidFinish, currentSeqIndex > 1)
 		menusAreFullScreen = true
-		
+
 		if Panels.Settings.resetVarsOnGameOver then
 			Panels.vars = {}
 		end
@@ -661,7 +740,7 @@ end
 local function finishSequence()
 	if not sequence.didFinish then
 		sequence.didFinish = true
-		startTransitionOut(sequence.direction)
+		startTransitionOut(sequence.direction, sequence.transitionDuration, sequence.transitionEase)
 	end
 end
 
@@ -682,11 +761,22 @@ local function shouldGoBack(panel)
 end
 
 function Panels.cranked(change, accChange)
-	if sequence.scrollType == Panels.ScrollType.MANUAL then
+	if sequence.scrollType == Panels.ScrollType.MANUAL or sequence.autoAdvanceWithCrank then
 		if sequence.axis == Panels.ScrollAxis.VERTICAL and sequence.scrollingIsReversed then
 			scrollPos = scrollPos + change
 		else
 			scrollPos = scrollPos - change
+		end
+	end
+	if sequence.scrollType == Panels.ScrollType.AUTO and sequence.autoAdvanceWithCrank then
+		local ticks = playdate.getCrankTicks(sequence.autoAdvanceTicks or 6)
+		if ticks > 0 then
+			scrollToNextPanel()
+		elseif ticks < 0 then
+			local p = panels[panelNum]
+			if shouldGoBack(p) then
+				scrollToPreviousPanel()
+			end
 		end
 	end
 end
@@ -703,24 +793,49 @@ local function checkInputs()
 	local p = panels[panelNum]
 	if sequenceIsFinishing then return end
 	if lastPanelIsShowing() then
-		if p.advanceFunction == nil then 
-			for i, button in ipairs(buttonIndicators) do
-				if pdButtonJustPressed(sequence.advanceControls[i].input) then
-					if sequence.advanceControls[i].target then
-						targetSequence = sequence.advanceControls[i].target
+		p = panels[#panels] -- make sure we're dealing with the last panel
+		if p.advanceFunction == nil then
+
+			if sequence.advanceControlSequence then
+				local trigger = p.advanceControlSequence[#p.buttonsPressed + 1]
+				if pdButtonJustPressed(trigger) then
+					p.buttonsPressed[#p.buttonsPressed + 1] = trigger
+					if #p.buttonsPressed == #p.advanceControlSequence then
+						if p.advanceDelay then
+							p:exit()
+							playdate.timer.performAfterDelay(p.advanceDelay, finishSequence)
+						else
+							finishSequence()
+						end
+					else 
+						playdate.timer.performAfterDelay(500, function () 
+							p:nextAdvanceControl(#p.buttonsPressed + 1, true)
+						end
+						)
 					end
-					button:press()
-					hideOtherAdvanceControls(i)
-					sequenceIsFinishing = true
-					if p.advanceDelay then
-						p:exit()
-						playdate.timer.performAfterDelay(p.advanceDelay, finishSequence)
-					else
-						finishSequence()
+				end
+			else
+
+
+				for i, button in ipairs(buttonIndicators) do
+					if pdButtonJustPressed(sequence.advanceControls[i].input) then
+						if sequence.advanceControls[i].target then
+							targetSequence = sequence.advanceControls[i].target
+						end
+						button:press()
+						hideOtherAdvanceControls(i)
+						sequenceIsFinishing = true
+						if p.advanceDelay then
+							p:exit()
+							playdate.timer.performAfterDelay(p.advanceDelay, finishSequence)
+						else
+							finishSequence()
+						end
 					end
 				end
 			end
 		end
+		return
 	end
 
 	if sequence.scrollType == Panels.ScrollType.AUTO then
@@ -736,6 +851,11 @@ local function checkInputs()
 						else
 							scrollToNextPanel()
 						end
+					else 
+						playdate.timer.performAfterDelay(500, function () 
+							p:nextAdvanceControl(#p.buttonsPressed + 1, true)
+						end
+						)
 					end
 				end
 			else
@@ -806,13 +926,13 @@ local function updateComic(offset)
 				finishSequence()
 			end
 		end
-		
+
 		updateScroll()
 		if sequence.scrollType == Panels.ScrollType.MANUAL then
 			updateArrowControls()
 		end
 		checkInputs()
-		
+
 	end
 end
 
@@ -828,7 +948,11 @@ local function drawComic(offset)
 	end
 
 	for i, panel in ipairs(panels) do
-		if (panel:isOnScreen(offset)) then
+		if panel:isOnScreen(offset) then
+			
+			if panel.wasOnScreen ~= true then
+				panel:setup()
+			end
 			panel:render(offset, sequence.foregroundColor, sequence.backgroundColor)
 		elseif panel.wasOnScreen then
 			if panel.targetSequenceFunction then
@@ -839,10 +963,10 @@ local function drawComic(offset)
 			panel.wasOnScreen = false
 		end
 	end
-	
+
 	gfx.popContext()
 	mainCanvas:draw(0, 0)
-	
+
 	if Panels.Settings.showFPS then
 		playdate.drawFPS(0,0)
 	end
@@ -877,13 +1001,16 @@ local function loadGameData()
 	if data then
 		currentSeqIndex = data.sequence
 		Panels.unlockedSequences = data.unlockedSequences or {}
+		Panels.visitedSequences = data.visitedSequences or {}
+		calculatePercentageComplete()
 		gameDidFinish = data.gameDidFinish
 		Panels.vars = data.vars or {}
+		Panels.persistentVars = data.persistentVars or {}
 	end
 end
 
 local function saveGameData()
-	playdate.datastore.write({ sequence = currentSeqIndex, unlockedSequences = Panels.unlockedSequences, gameDidFinish = gameDidFinish, vars = Panels.vars })
+	playdate.datastore.write({ sequence = currentSeqIndex, unlockedSequences = Panels.unlockedSequences, visitedSequences = Panels.visitedSequences, gameDidFinish = gameDidFinish, vars = Panels.vars, persistentVars = Panels.persistentVars })
 end
 
 function playdate.gameWillTerminate()
@@ -959,7 +1086,11 @@ function Panels.onMenuDidHide(menu)
 end
 
 function Panels.onMenuDidStartOver()
-	alert:show()
+	if not Panels.Settings.useChapterMenu and gameDidFinish then
+		onAlertDidStartOver()
+	else
+		alert:show()
+	end
 end
 
 function onAlertDidStartOver()
@@ -984,7 +1115,7 @@ end
 function shouldShowMainMenu()
 	local should = false
 	if Panels.Settings.showMenuOnLaunch then
-		if currentSeqIndex > 1 or Panels.Settings.skipMenuOnFirstLaunch == false then
+		if (currentSeqIndex and currentSeqIndex > 1) or Panels.Settings.skipMenuOnFirstLaunch == false then
 			should = true
 		end
 	end
@@ -1006,6 +1137,18 @@ local function updateSystemMenu()
 			end
 		)
 		printError(error, "Error adding Chapters to system menu")
+	end
+
+	if Panels.Settings.showMainMenuOption then
+		local homeMenuItem, error = sysMenu:addMenuItem("Main Menu",
+			function()
+				Panels.creditsMenu:hide()
+				if Panels.chapterMenu then Panels.chapterMenu:hide() end
+				menusAreFullScreen = true
+				Panels.mainMenu:show()
+			end
+		)
+		printError(error, "Error adding Main Menu to system menu")
 	end
 
 
@@ -1059,12 +1202,21 @@ local function createCreditsSequence()
 	table.insert(Panels.comicData, seq)
 end
 
-function setDefaultFont() 
+function setDefaultFont()
 	if Panels.Settings.defaultFontFamily then
 		gfx.setFontFamily(Panels.Font.getFamily(Panels.Settings.defaultFontFamily))
-	elseif Panels.Settings.defaultFont then 
+	elseif Panels.Settings.defaultFont then
 		gfx.setFont(Panels.Font.get(Panels.Settings.defaultFont))
 	end
+end
+
+-- call this if you need to interrupt a cutscene (from a menu option for example)
+-- this should clean up panel and sequence audio that normally happens when the cutscene completes
+function Panels.haltCutscene()
+	Panels.Audio.killBGAudio()
+	unloadSequence()
+	previousBGColor = nil -- prevent future cross-fade attempt
+	playdate.inputHandlers.pop()
 end
 
 function Panels.startCutscene(comicData, callback)
@@ -1101,12 +1253,13 @@ function Panels.start(comicData)
 
 	transitionFader = gfx.image.new(ScreenWidth, ScreenHeight)
 
+	sequences = Panels.comicData
+
 	loadGameData()
 	validateSettings()
 	updateSystemMenu()
 
-	sequences = Panels.comicData
-	createMenus(sequences, gameDidFinish, currentSeqIndex > 1);
+	createMenus(sequences, gameDidFinish, currentSeqIndex and currentSeqIndex > 1)
 
 	if shouldShowMainMenu() then
 		menusAreFullScreen = true
@@ -1123,6 +1276,7 @@ end
 -- DEBUG
 
 local function unlockAll()
+	Panels.unlockedSequences = {}
 	for i = 1, #sequences, 1 do
 		table.insert(Panels.unlockedSequences, true)
 	end

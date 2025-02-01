@@ -5,23 +5,31 @@ local ScreenHeight <const> = playdate.display.getHeight()
 
 local gfx <const> = playdate.graphics
 
-function Panels.ButtonIndicator.getPosititonForScrollDirection(direction)
-	local x = ScreenWidth - 42
-		local y = ScreenHeight / 2 -20
+Panels.ControlSize = {
+	LARGE = 40,
+	MEDIUM = 30,
+	SMALL = 20,
+}
+
+function Panels.ButtonIndicator.getPosititonForScrollDirection(direction, _size)
+	local size = _size or Panels.ControlSize.LARGE
+
+	local x = ScreenWidth - size - 2
+		local y = (ScreenHeight - size) / 2
 		if direction == Panels.ScrollDirection.RIGHT_TO_LEFT then
 			x = 2
 		elseif direction == Panels.ScrollDirection.TOP_DOWN then
-			x = ScreenWidth / 2 - 20
-			y = ScreenHeight - 42
+			x = (ScreenWidth - size ) / 2
+			y = ScreenHeight - size - 2
 		elseif direction == Panels.ScrollDirection.BOTTOM_UP then
-			x = ScreenWidth / 2 - 20
+			x = (ScreenWidth - size ) / 2
 			y = 2
 		end
 
 	return x, y
 end
 
-function Panels.ButtonIndicator.new()
+function Panels.ButtonIndicator.new(size)
 	local button = {imageTable = nil, holdFrame = 4}
 	button.currentFrame = 1
 	button.step = 1
@@ -29,6 +37,7 @@ function Panels.ButtonIndicator.new()
 	button.x = 0
 	button.y = 0
 	button.button = "0"
+	button.size = size or Panels.ControlSize.LARGE
 	
 	button.timer = playdate.timer.new(
 		50, 
@@ -44,37 +53,45 @@ function Panels.ButtonIndicator.new()
 		self.y = y
 	end
 	
-	function button:setButton(button)
-		if self.button ~= button then 
-			local imgTable = nil
-			if button == Panels.Input.A then
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonA-table-40-40.png")
-			elseif button == Panels.Input.B then
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonB-table-40-40.png")
-			elseif button == Panels.Input.UP then
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonUP-table-40-40.png")
-			elseif button == Panels.Input.RIGHT then
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonRT-table-40-40.png")
-			elseif button == Panels.Input.DOWN then
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonDN-table-40-40.png")
+	function button:setButton(input)
+		if self.button ~= input then
+			local imageName = ""
+			if input == Panels.Input.A then
+				imageName = "buttonA"
+			elseif input == Panels.Input.B then
+				imageName = "buttonB"
+			elseif input == Panels.Input.UP then
+				imageName = "buttonUP"
+			elseif input == Panels.Input.RIGHT then
+				imageName = "buttonRT"
+			elseif input == Panels.Input.DOWN then
+				imageName = "buttonDN"
 			else
-				imgTable = gfx.imagetable.new(
-					Panels.Settings.path .. "assets/images/buttonLT-table-40-40.png")
+				imageName = "buttonLT"
 			end
-			self.imageTable = imgTable
+
+			local imagePathSuffix = "-table-40-40.png"
+			if self.size == Panels.ControlSize.SMALL then imagePathSuffix = "-SM-table-20-20.png" end
+			if self.size == Panels.ControlSize.MEDIUM then imagePathSuffix = "-MD-table-30-30.png" end
+			
+			self.imageTable = gfx.imagetable.new(
+				Panels.Settings.path .. "assets/images/" .. imageName .. imagePathSuffix)
 		end
 	end
 	
 	function button:setPositionForScrollDirection(direction)
-		local x, y = Panels.ButtonIndicator.getPosititonForScrollDirection(direction)
+		print("Setting position for scroll direction. size: " .. self.size)
+		local x, y = Panels.ButtonIndicator.getPosititonForScrollDirection(direction, self.size)
 		self:setPosition(x, y)
 	end
 	
+	function button:reset() 
+		self.state = "hidden"
+		self.currentFrame = 1
+		self.timer:pause()
+		self.step = 1
+	end
+
 	function button:show()
 		if self.currentFrame == 1 and self.state ~= "showing" then 
 			self.state = "showing"

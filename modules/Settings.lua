@@ -12,7 +12,7 @@ Panels.Settings = {
 	
 	-- panel settings
 	defaultFrame = {gap = 50, margin = 8},
-	snapToPanels = true,
+	snapToPanels = false,
 	sequenceTransitionDuration = 750,
 	borderWidth = 2,
 	borderRadius = 2,
@@ -27,6 +27,7 @@ Panels.Settings = {
 	showMenuOnLaunch = false,
 	skipMenuOnFirstLaunch = false,
 	playMenuSounds = true,
+	showMainMenuOption = false,
 
 	-- credits
 	showCreditsOnGameOver = false,

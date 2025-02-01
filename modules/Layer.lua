@@ -3,8 +3,9 @@ local ScreenHeight <const> = playdate.display.getHeight()
 local ScreenWidth <const> = playdate.display.getWidth()
 
 function Panels.renderLayerInPanel(layer, panel, offset)
-	
+
 	local pct = getScrollPercentages(panel.frame, offset, panel.axis)
+	local cntrlPct = calculateControlPercent(pct, panel)
 	local p = layer.parallax or 0
 	local startValues = table.shallow_copy(layer)
 	if layer.isExiting and layer.animate then
@@ -109,9 +110,9 @@ function Panels.renderLayerInPanel(layer, panel, offset)
 
 	if img then
 		if layer.visible then
-			
+
 			if globalX + img.width > 0 and globalX < ScreenWidth and globalY + img.height > 0 and globalY < ScreenHeight then
-				
+
 				if layer.alpha and layer.alpha < 1 then
 					img:drawFaded(xPos, yPos, layer.alpha, playdate.graphics.image.kDitherTypeBayer8x8)
 				else
@@ -137,7 +138,7 @@ function Panels.renderLayerInPanel(layer, panel, offset)
 	elseif layer.text then
 		if layer.visible then
 			if globalX + ScreenWidth > 0 and globalX < ScreenWidth and globalY + ScreenHeight > 0 and globalY < ScreenHeight then
-				if layer.alpha == nil or layer.alpha > 0.5 then
+				if layer.alpha == nil or layer.alpha > 0 then
 					panel:drawTextLayer(layer, xPos, yPos, cntrlPct)
 				end
 			end

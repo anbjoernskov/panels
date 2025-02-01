@@ -37,12 +37,13 @@ local function createFrameFromPartialFrame(frame)
 end
 
 function getScrollPercentages(frame, offset, axis)
+	if offset == nil then return {x = 0.5, y - 0.5} end
+
 	local xPct = 1 - (frame.x - frame.margin + frame.width + offset.x) / (ScreenWidth + frame.width)
 	local yPct = 1 - (frame.y - frame.margin + frame.height + offset.y) / (ScreenHeight + frame.height)
 
 	local pct = { x = xPct, y = yPct }
 	if axis == AxisHorizontal then pct.y = 0.5 else pct.x = 0.5 end
-
 	return pct
 end
 
@@ -53,7 +54,7 @@ local function calculateShake(strength)
 	}
 end
 
-local function doLayerEffect(layer)
+function doLayerEffect(layer)
 	if layer.effect.type == Panels.Effect.BLINK then
 		if layer.timer == nil then
 			if layer.effect.delay then
@@ -111,15 +112,19 @@ function Panels.Panel.new(data)
 		end
 	end
 
+	if panel.advanceControlPositions then
+		panel.advanceControlPosition = panel.advanceControlPositions[1]
+	end
+
 	local imageFolder = Panels.Settings.imageFolder
 
 	if panel.showAdvanceControl then
-		panel.advanceButton = Panels.ButtonIndicator.new()
+		panel.advanceButton = Panels.ButtonIndicator.new(panel.advanceControlSize)
 		panel.advanceButton:setButton(panel.advanceControl)
 		if panel.advanceControlPosition then
 			panel.advanceButton:setPosition(panel.advanceControlPosition.x, panel.advanceControlPosition.y)
 		else
-			panel.advanceButton:setPositionForScrollDirection(panel.direction)
+			panel.advanceButton:setPositionForScrollDirection(panel.direction, panel.advanceControlSize)
 		end
 	end
 
@@ -209,6 +214,26 @@ function Panels.Panel.new(data)
 		panel.sfxTrigger = panel.audio.scrollTrigger or 0
 	end
 
+	function panel:nextAdvanceControl(controlIndex, show)
+		local control = self.advanceControlSequence[controlIndex]
+		if control and self.advanceButton then
+			self.advanceButton:reset()
+			self.advanceButton:setButton(control)
+			self.advanceControl = control
+
+			if self.advanceControlPositions then
+				local pos = self.advanceControlPositions[controlIndex]
+				if pos then
+					self.advanceButton:setPosition(pos.x, pos.y)
+				end
+			end
+			
+			if show then 
+				self.advanceButton:show() 
+			end
+		end
+	end
+
 	function panel:isOnScreen(offset)
 		local isOn = false
 		local f = self.frame
@@ -253,9 +278,12 @@ function Panels.Panel.new(data)
 		end
 	end
 
-	function panel:updatePanelAudio(pct)
-		local count = panel.audio.repeatCount or 1
-		if panel.audio.loop then count = 0 end
+	function panel:updatePanelAudio(offset)
+		local pct = getScrollPercentages(self.frame, offset, self.axis)
+		local cntrlPct = calculateControlPercent(pct, self)
+
+		local count = self.audio.repeatCount or 1
+		if self.audio.loop then count = 0 end
 		if self.audio.triggerSequence then
 			if self.audioTriggersPressed == nil then self.audioTriggersPressed = {} end
 			local triggerButton = self.audio.triggerSequence[#self.audioTriggersPressed + 1]
@@ -264,7 +292,7 @@ function Panels.Panel.new(data)
 				self.audioTriggersPressed[#self.audioTriggersPressed + 1] = triggerButton
 				if #self.audioTriggersPressed == #self.audio.triggerSequence then
 					playdate.timer.performAfterDelay(self.audio.delay or 0, function()
-						self.sfxPlayer:play(count)
+						if self.sfxPlayer then self.sfxPlayer:play(count) end
 					end)
 
 					if self.audio.repeats ~= nil then
@@ -277,15 +305,15 @@ function Panels.Panel.new(data)
 				end
 			end
 
-		elseif (pct < 1 and pct >= self.sfxTrigger) and (self.prevPct <= self.sfxTrigger or self.audio.loop) then
+		elseif (cntrlPct < 1 and cntrlPct >= self.sfxTrigger) and (self.prevPct <= self.sfxTrigger or self.audio.loop) then
 			if not self.sfxPlayer:isPlaying() and not self.soundIsPaused then
 				playdate.timer.performAfterDelay(self.audio.delay or 0, function()
-					self.sfxPlayer:play(count)
+					if self.sfxPlayer then self.sfxPlayer:play(count) end
 				end)
 			end
 		end
 
-		self:fadePanelVolume(pct)
+		self:fadePanelVolume(cntrlPct)
 	end
 
 	function panel:layerShouldShake(layer)
@@ -314,6 +342,38 @@ function Panels.Panel.new(data)
 
 	end
 
+	function calculateControlPercent(scrollPercentages, panel)
+		local cntrlPct = 0
+		if panel.axis == AxisHorizontal then cntrlPct = scrollPercentages.x else cntrlPct = scrollPercentages.y end
+		if panel.scrollingIsReversed then cntrlPct = 1 - cntrlPct end
+		return cntrlPct
+	end
+
+	function layerShouldRender(layer)
+		if layer.renderCondition then
+			if Panels.vars[layer.renderCondition.var] ~= nil then
+				if Panels.vars[layer.renderCondition.var] == layer.renderCondition.value then
+					return true
+				else
+					return false
+				end
+			else
+				if not layer.didWarnForInvalidRenderCondition then
+					-- just print this once per layer
+					printError("No value for '" .. layer.renderCondition.var .. "' found in Panels.vars", "Invalid renderCondition")
+					layer.didWarnForInvalidRenderCondition = true
+				end
+				if layer.renderCondition.value == false then -- match nil value to false condition
+					return true
+				else
+					return false
+				end
+			end
+		end
+
+		return true
+	end
+
 	function panel:drawLayers(offset)
 		local layers = self.layers
 		local frame = table.shallow_copy(self.frame)
@@ -325,9 +385,7 @@ function Panels.Panel.new(data)
 		end
 		local shake
 		local pct = getScrollPercentages(frame, offset, self.axis)
-		local cntrlPct
-		if self.axis == AxisHorizontal then cntrlPct = pct.x else cntrlPct = pct.y end
-		if self.scrollingIsReversed then cntrlPct = 1 - cntrlPct end
+		local cntrlPct = calculateControlPercent(pct, self)
 
 		if self.effect then
 			if self.effect.type == Panels.Effect.SHAKE_UNISON then
@@ -335,12 +393,10 @@ function Panels.Panel.new(data)
 			end
 		end
 
-		if self.sfxPlayer then
-			self:updatePanelAudio(cntrlPct)
-		end
-
 		if layers then
 			for i, layer in ipairs(layers) do
+				if not layerShouldRender(layer) then goto continue end
+
 				local p = layer.parallax or 0
 				local startValues = table.shallow_copy(layer)
 				if layer.isExiting and layer.animate then
@@ -376,7 +432,7 @@ function Panels.Panel.new(data)
 									local count = anim.audio.repeatCount or 1
 									if anim.audio.loop then count = 0 end
 									playdate.timer.performAfterDelay(anim.delay + (anim.audio.delay or 0), function()
-										layer.sfxPlayer:play(count)
+										if layer.sfxPlayer then layer.sfxPlayer:play(count) end
 									end)
 								end
 							end
@@ -415,15 +471,15 @@ function Panels.Panel.new(data)
 					yPos = yPos + shake.y * (1 - p * p)
 				end
 
-				if layer.pixelLock then 
+				if layer.pixelLock then
 					-- offset gets added here to ensure the layer position + offset gets rounded properly
 					-- then subtract the offset because it's applied at the panel level
 					local offX = math.floor(offset.x)
 					local offY = math.floor(offset.y)
-					
+
 					xPos = math.floor((xPos + offX) / layer.pixelLock) * layer.pixelLock - offX
 					yPos = math.floor((yPos + offY) / layer.pixelLock) * layer.pixelLock - offY
-					
+
 				end
 
 				if layer.effect then
@@ -442,7 +498,7 @@ function Panels.Panel.new(data)
 							end
 						end
 						img = layer.imgs[layer.currentImage]
-					elseif panel.forceImageIndex then
+					elseif layer.manuallySetImageIndex then
 						img = layer.imgs[layer.currentImage]
 					else
 						local p = cntrlPct
@@ -458,9 +514,9 @@ function Panels.Panel.new(data)
 
 				if img then
 					if layer.visible then
-						
+
 						if globalX + img.width > 0 and globalX < ScreenWidth and globalY + img.height > 0 and globalY < ScreenHeight then
-							
+
 							if layer.alpha and layer.alpha < 1 then
 								img:drawFaded(xPos, yPos, layer.alpha, playdate.graphics.image.kDitherTypeBayer8x8)
 							else
@@ -485,10 +541,13 @@ function Panels.Panel.new(data)
 
 				elseif layer.text then
 					if layer.visible then
-						if globalX + ScreenWidth > 0 and globalX < ScreenWidth and globalY + ScreenHeight > 0 and globalY < ScreenHeight then
-							if layer.alpha == nil or layer.alpha > 0.5 then
-								self:drawTextLayer(layer, xPos, yPos, cntrlPct)
-							end
+						local widthLimit = ScreenWidth
+						local heightLimit = ScreenHeight
+						if layer.rect and layer.rect.width > ScreenWidth then widthLimit = layer.rect.width end
+						if layer.rect and layer.rect.height > ScreenHeight then heightLimit = layer.rect.height end
+
+						if globalX + widthLimit > 0 and globalX < widthLimit and globalY + heightLimit > 0 and globalY < heightLimit then
+							self:drawTextLayer(layer, xPos, yPos, cntrlPct)
 						end
 					end
 				elseif layer.animationLoop then
@@ -510,11 +569,17 @@ function Panels.Panel.new(data)
 						layer.animationLoop:draw(xPos, yPos)
 					end
 				end
-
+				::continue::
 			end
 		end
 		self.prevPct = cntrlPct
 
+	end
+
+	function panel:setup() 
+		if self.setupFunction then
+			self:setupFunction()
+		end
 	end
 
 	function panel:reset()
@@ -567,6 +632,22 @@ function Panels.Panel.new(data)
 		self.audioRepeats = 1
 		self.advanceControlTimerDidEnd = false
 		self.advanceControlTimer = nil
+		self.autoAdvanceDidComplete = false
+		self.autoAdvanceTimerDidStart = false
+
+		if self.autoAdvanceTimer then
+			self.autoAdvanceTimer:remove()
+			self.autoAdvanceTimer = nil
+		end
+
+		if self.advanceControlSequence and #self.advanceControlSequence > 1 then
+			self:nextAdvanceControl(1, false)
+		end
+
+		if self.advanceButton then
+			self.advanceButton:reset()
+		end
+
 		if self.prevPct > 0.5 then
 			self.prevPct = 1
 		else
@@ -581,16 +662,24 @@ function Panels.Panel.new(data)
 	end
 
 
-	local textMarginLeft<const> = 4
-	local textMarginTop<const> = 1
+	local textMarginHorizontal<const> = 4
+	local textMarginVertical<const> = 1
 	function panel:drawTextLayer(layer, xPos, yPos, cntrlPct)
 		if(layer.cachedTextImg == nil) then
-			layer.cachedTextImg = gfx.image.new(ScreenWidth, ScreenHeight)
+			local textW = layer.rect and layer.rect.width + layer.x or ScreenWidth
+			local textH = layer.rect and layer.rect.height + layer.y or ScreenHeight
+			layer.cachedTextImg = gfx.image.new(textW, textH)
 			layer.needsRedraw = true
 		end
 
+		local textMarginLeft = layer.margin and (layer.margin.left or layer.margin.h) or textMarginHorizontal
+		local textMarginRight = layer.margin and (layer.margin.right or layer.margin.h) or textMarginHorizontal
+		local textMarginTop = layer.margin and (layer.margin.top or layer.margin.v) or textMarginVertical
+		local textMarginBottom = layer.margin and (layer.margin.bottom or layer.margin.v) or textMarginVertical
 
-		if(layer.isTyping or layer.needsRedraw) then 
+		local lineHeight = layer.lineHeightAdjustment or self.lineHeightAdjustment or 0
+
+		if(layer.isTyping or layer.needsRedraw) then
 			gfx.pushContext(layer.cachedTextImg)
 			gfx.clear(gfx.kColorClear)
 
@@ -638,29 +727,65 @@ function Panels.Panel.new(data)
 			end
 
 			if layer.background then
-				local w, h = gfx.getTextSize(txt)
+				local w, h = 0, 0
+				if layer.rect then
+					w, h = gfx.getTextSizeForMaxWidth(txt, layer.rect.width, lineHeight)
+				else
+					w, h = gfx.getTextSize(txt)
+				end
+				local borderColor = Panels.Color.BLACK
 				gfx.setColor(layer.background)
 				if layer.background == Panels.Color.BLACK then
 					gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
+					borderColor = Panels.Color.WHITE
 				end
 				if w > 0 and h > 0 then
-					gfx.fillRect(0, 0, w + 8, h + 2)
+					if layer.borderRadius then
+						gfx.fillRoundRect(0, 0, w + textMarginLeft + textMarginRight, h + textMarginTop + textMarginBottom, layer.borderRadius)
+					else
+						gfx.fillRect(0, 0, w + textMarginLeft + textMarginRight, h + textMarginTop + textMarginBottom)
+					end
+
+					if layer.border then
+						local borderWidth = layer.border or 1
+						gfx.setColor(borderColor)
+						gfx.setLineWidth(borderWidth)
+						if layer.borderRadius then
+							gfx.drawRoundRect(borderWidth * 0.5, borderWidth * 0.5, w + textMarginLeft + textMarginRight, h + textMarginTop + textMarginBottom, layer.borderRadius)
+						else
+							gfx.drawRect(borderWidth * 0.5, borderWidth * 0.5, w + textMarginLeft + textMarginRight, h + textMarginTop + textMarginBottom)
+						end
+
+					end
 				end
 			end
-			if layer.color == Panels.Color.WHITE then
+
+			local fillWhite = self.color == Panels.Color.WHITE
+			if layer.color then fillWhite = layer.color == Panels.Color.WHITE end
+			if fillWhite then
 				gfx.setImageDrawMode(gfx.kDrawModeFillWhite)
 			end
 
+			local invertTextColor = self.invertTextColor
+			if layer.invertTextColor ~= nil then invertTextColor = layer.invertTextColor end
+			if invertTextColor then
+				gfx.setImageDrawMode(gfx.kDrawModeInverted)
+			end
+
 			if layer.rect then
-				gfx.drawTextInRect(txt, textMarginLeft, textMarginTop, layer.rect.width, layer.rect.height, layer.lineHeightAdjustment or 0, "...",
+				gfx.drawTextInRect(txt, textMarginLeft, textMarginTop, layer.rect.width, layer.rect.height, lineHeight, "...",
 					layer.alignment or Panels.TextAlignment.LEFT)
 			else
 				gfx.drawText(txt, textMarginLeft, textMarginTop)
 			end
 
-			gfx.popContext() 
+			gfx.popContext()
 		end
-		layer.cachedTextImg:draw(xPos - textMarginLeft, yPos - textMarginTop)
+		if layer.alpha and layer.alpha < 1 then
+			layer.cachedTextImg:drawFaded(xPos - textMarginLeft, yPos - textMarginTop, layer.alpha, playdate.graphics.image.kDitherTypeBayer8x8)
+		else
+			layer.cachedTextImg:draw(xPos - textMarginLeft, yPos - textMarginTop)
+		end
 		layer.needsRedraw = false
 	end
 
@@ -701,7 +826,7 @@ function Panels.Panel.new(data)
 		if self.advanceFunction then
 			return self:advanceFunction()
 		else
-			return false
+			return self.autoAdvanceDidComplete
 		end
 	end
 
@@ -721,10 +846,9 @@ function Panels.Panel.new(data)
 	end
 
 	function panel:updateAdvanceButton()
-		if self.advanceButton.state == "hidden" and not self.didFinish then
-
+		if self.advanceButton.state == "hidden" then
 			if self.advanceControlPosition and self.advanceControlPosition.delay and self.advanceControlTimer == nil then
-				self.advanceControlTimer = playdate.timer.new(self.advanceControlPosition.delay, nil)
+				self.advanceControlTimer = playdate.timer.new(self.advanceControlPosition.delay, nil)	
 			elseif self.advanceControlPosition == nil or self.advanceControlPosition.delay == nil or
 				(self.advanceControlTimer and self.advanceControlTimer.currentTime >= self.advanceControlTimer.duration) then
 				if not self.advanceControlTimerDidEnd then
@@ -740,19 +864,36 @@ function Panels.Panel.new(data)
 			self.advanceButton:draw()
 		end
 	end
-	
+
+	function panel:autoAdvanceTimerComplete() 
+		if self.autoAdvanceTimerDidStart then 
+			self.autoAdvanceDidComplete = true 
+		else 
+			self.autoAdvanceTimer:remove()
+		end
+	end
+
 	function panel:render(offset, borderColor, bgColor)
 		local frame = self.frame
 		self.wasOnScreen = true
-		
-		if self.updateFunction then 
+
+		if self.updateFunction then
 			self:updateFunction(offset)
 		end
-		
+
+		if self.autoAdvance ~= nil and not self.autoAdvanceTimerDidStart then
+			self.autoAdvanceTimerDidStart = true
+			self.autoAdvanceTimer = playdate.timer.new(self.autoAdvance, function() self:autoAdvanceTimerComplete() end)
+		end
+
 		gfx.setDrawOffset(math.floor(offset.x + frame.x), math.floor(offset.y + frame.y))
 		gfx.setClipRect(0, 0, frame.width, frame.height)
-		
+
 		if self.backgroundColor then gfx.clear(self.backgroundColor) end
+		
+		if self.sfxPlayer then
+			self:updatePanelAudio(offset)
+		end
 
 		if self.renderFunction then
 			self:renderFunction(offset)
@@ -766,7 +907,7 @@ function Panels.Panel.new(data)
 			end
 			self.borderImage:draw(0, 0)
 		end
-		
+
 		if self.advanceButton then
 			self:updateAdvanceButton()
 		end
