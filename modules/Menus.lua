@@ -611,13 +611,13 @@ function hintsList:drawCell(section, row, column, selected, x, y, width, height)
 		
 		gfx.setFont(listFont)
 		if next(selectedSequenceHints) ~= nil then
-			if selectedSequenceHints[row].image ~= nil then
-				gfx.drawTextInRect("Answer", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)	
+			if row == self.numRows[1] or selectedSequenceHints[row].image ~= nil then
+				gfx.drawTextInRect("*Answer*", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)	
 			else
-				gfx.drawTextInRect("Hint " .. row .. "", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+				gfx.drawTextInRect("*Hint " .. row .. "*", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
 			end
 		else
-			gfx.drawTextInRect("No hints for this chapter", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
+			gfx.drawTextInRect("*No hints for this chapter*", x + 16, y+8, width -32, height+2, nil, "...", kTextAlignment.left)
 		end
 
 end
