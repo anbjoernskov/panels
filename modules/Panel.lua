@@ -596,7 +596,9 @@ function Panels.Panel.new(data)
 
 				layer.startDelayTriggered = nil
 				if layer.animationLoop then
-					layer.animationLoop.frame = 1
+					if layer.animationLoop.frame ~= 1 then
+						layer.animationLoop.frame = 1
+					end
 					layer.animationLoop.paused = true
 				end
 				layer.isExiting = false
