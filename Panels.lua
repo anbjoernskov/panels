@@ -835,7 +835,7 @@ local function checkInputs()
 				end
 			end
 		end
-		return
+		-- return
 	end
 
 	if sequence.scrollType == Panels.ScrollType.AUTO then
